@@ -1,4 +1,4 @@
-﻿"""黑板镜面反射与最优俯仰角 — 数值仿真与作图（修正入射方向约定）"""
+"""黑板镜面反射与最优俯仰角 — 数值仿真与作图（修正入射方向约定）"""
 from __future__ import annotations
 
 import json
@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib import rcParams
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "DejaVu Sans"]
 rcParams["axes.unicode_minus"] = False
@@ -28,7 +29,7 @@ class Params:
     y_seat_max = 2.5
     z_eye = 1.15
     epsilon_deg = 9.0
-    theta_max_deg = 6.0
+    theta_max_deg = 8.0
     n_u = 8
     n_v = 6
     nx_grid = 28
@@ -122,8 +123,7 @@ def plot_topdown_compare(l_in: np.ndarray, theta0: float, theta1: float, tag: st
     _, _, m0 = affected_mask(theta0, l_in)
     _, _, m1 = affected_mask(theta1, l_in)
     extent = [P.y_seat_min, P.y_seat_max, P.x_seat_min, P.x_seat_max]
-    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.6), sharey=True)
-    im = None
+    fig, axes = plt.subplots(1, 2, figsize=(10.8, 4.6), sharey=True)
     for ax, m, title in zip(
         axes,
         [m0, m1],
@@ -134,7 +134,7 @@ def plot_topdown_compare(l_in: np.ndarray, theta0: float, theta1: float, tag: st
             origin="lower",
             extent=extent,
             aspect="auto",
-            cmap="RdYlGn_r",
+            cmap="binary_r",
             vmin=0,
             vmax=1,
             interpolation="nearest",
@@ -153,9 +153,13 @@ def plot_topdown_compare(l_in: np.ndarray, theta0: float, theta1: float, tag: st
         )
         ax.text(0.5 * (P.y_board_min + P.y_board_max), -0.55, "黑板（俯视投影）", ha="center", va="top", fontsize=9)
         ax.set_ylim(-0.8, P.x_seat_max + 0.5)
-    fig.colorbar(im, ax=axes.ravel().tolist(), label="1=易受反射眩光影响", shrink=0.85)
+        # 每个子图各自配置右侧色条，避免共享色条位置尴尬
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="3.5%", pad=0.08)
+        cbar = fig.colorbar(im, cax=cax, ticks=[0, 1])
+        cbar.set_label("1=易受反射眩光影响")
     fig.suptitle(f"教室内受影响座位区域对比（{tag}）", fontsize=12)
-    fig.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.14, wspace=0.25)
+    fig.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.14, wspace=0.45)
     out = FIG_DIR / f"topdown_compare_{tag}.png"
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -180,6 +184,21 @@ def plot_theta_curve(times: np.ndarray, thetas: np.ndarray, feas: np.ndarray):
     plt.close(fig)
 
 
+def plot_affected_curve(times: np.ndarray, frac0: np.ndarray, frac_opt: np.ndarray):
+    fig, ax = plt.subplots(figsize=(8.0, 4.0))
+    ax.plot(times, 100.0 * frac0, color="tab:red", lw=2.0, marker="o", ms=3, label="调整前（θ=0）")
+    ax.plot(times, 100.0 * frac_opt, color="tab:blue", lw=2.0, marker="s", ms=3, label="调整后（θ=θ*）")
+    ax.set_xlabel("时刻 / h")
+    ax.set_ylabel("受影响座位比例 / %")
+    ax.set_title("全天各时刻受影响座位比例对比")
+    ax.set_xlim(times.min(), times.max())
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / "affected_ratio_compare.png", dpi=180)
+    plt.close(fig)
+
+
 def plot_section(theta_deg: float, l_in: np.ndarray, eye_xz: tuple[float, float], tag: str):
     th = np.radians(theta_deg)
     H = P.H
@@ -192,10 +211,65 @@ def plot_section(theta_deg: float, l_in: np.ndarray, eye_xz: tuple[float, float]
     n, _, _, _ = board_frame(theta_deg)
     midx, midz = 0.5 * x1, 0.5 * (P.z_bot + z1)
     scale = 1.0
-    ax.arrow(midx, midz, scale * l_in[0], scale * l_in[2], head_width=0.06, fc="gold", ec="k", length_includes_head=True)
-    ax.arrow(midx, midz, 0.45 * n[0], 0.45 * n[2], head_width=0.05, fc="g", ec="k", length_includes_head=True)
+    ax.arrow(
+        midx,
+        midz,
+        scale * l_in[0],
+        scale * l_in[2],
+        head_width=0.06,
+        fc="gold",
+        ec="k",
+        lw=1.6,
+        length_includes_head=True,
+    )
+    ax.arrow(
+        midx,
+        midz,
+        0.45 * n[0],
+        0.45 * n[2],
+        head_width=0.05,
+        fc="g",
+        ec="k",
+        lw=1.6,
+        length_includes_head=True,
+    )
     r = reflect(l_in, n)
-    ax.arrow(midx, midz, scale * r[0], scale * r[2], head_width=0.06, fc="cyan", ec="k", length_includes_head=True)
+    ax.arrow(
+        midx,
+        midz,
+        scale * r[0],
+        scale * r[2],
+        head_width=0.06,
+        fc="cyan",
+        ec="k",
+        lw=1.8,
+        length_includes_head=True,
+    )
+    # 画出“看向板面中点”的视线方向，便于与反射方向做角度比较
+    v = np.array([ex - midx, ez - midz], dtype=float)
+    v = v / (np.linalg.norm(v) + 1e-12)
+    ax.arrow(
+        midx,
+        midz,
+        1.0 * v[0],
+        1.0 * v[1],
+        head_width=0.05,
+        fc="none",
+        ec="tab:red",
+        lw=1.6,
+        linestyle="--",
+        length_includes_head=True,
+    )
+    c = float(np.clip(np.dot(np.array([r[0], r[2]]), v), -1.0, 1.0))
+    miss_deg = float(np.degrees(np.arccos(c)))
+    ax.text(
+        0.03,
+        0.93,
+        f"反射-视线夹角: {miss_deg:.2f}°",
+        transform=ax.transAxes,
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="0.5"),
+    )
     ax.set_xlabel("$x$ / m（距墙深度）")
     ax.set_ylabel("$z$ / m")
     ax.set_title(f"竖直截面示意（$\\theta={theta_deg:.2f}^\\circ$，{tag}）")
@@ -230,18 +304,58 @@ def main():
     thetas_star = np.array(thetas_star)
     feas = np.array(feas)
     plot_theta_curve(times, thetas_star, feas)
+    frac0 = np.array([r["affected_frac_theta0"] for r in rows], dtype=float)
+    frac_opt = np.array([r["affected_frac_opt"] for r in rows], dtype=float)
+    plot_affected_curve(times, frac0, frac_opt)
+
+    # 选受害比例最大的时刻（展示“问题最严重”的情形）
     worst_idx = int(np.argmax([r["affected_frac_theta0"] for r in rows]))
     t_w = rows[worst_idx]["t_h"]
     l_w = sun_incident_direction(t_w)
     th_w = rows[worst_idx]["theta_star_deg"]
     plot_topdown_compare(l_w, 0.0, th_w, f"t{t_w:.1f}h".replace(".", "p"))
-    idx12 = int(np.where(np.isclose(times, 12.0))[0][0])
-    th_n = rows[idx12]["theta_star_deg"]
-    plot_topdown_compare(sun_incident_direction(12.0), 0.0, th_n, "t12h")
+
+    # 选“no glare”代表时刻：调整前有受害，且存在某个 theta 使全教室受害比例为 0
+    noglare_example = None
+    candidates = [r for r in rows if r["affected_frac_theta0"] > 0.02]
+    if not candidates:
+        candidates = [r for r in rows if r["affected_frac_theta0"] > 0.0]
+    for r in candidates:
+        t_b = r["t_h"]
+        l_b = sun_incident_direction(t_b)
+        theta_zero = None
+        for th in np.arange(0.0, P.theta_max_deg + 1e-9, 0.05):
+            _, _, mm = affected_mask(float(th), l_b)
+            if float(mm.mean()) == 0.0:
+                theta_zero = float(th)
+                break
+        if theta_zero is None:
+            continue
+        if noglare_example is None or theta_zero < noglare_example["theta_noglare_deg"]:
+            noglare_example = {
+                "t_h": float(t_b),
+                "theta_noglare_deg": float(theta_zero),
+                "affected_frac_theta0": float(r["affected_frac_theta0"]),
+                "affected_frac_theta_noglare": 0.0,
+            }
+    if noglare_example is not None:
+        l_b = sun_incident_direction(noglare_example["t_h"])
+        plot_topdown_compare(l_b, 0.0, noglare_example["theta_noglare_deg"], "noglare")
+
+    # 竖直截面图采用“no-glare策略角”增强可读性：前后差异更直观
+    theta_section_after = th_w
+    for th in np.arange(0.0, P.theta_max_deg + 1e-9, 0.05):
+        _, _, mm = affected_mask(float(th), l_w)
+        if float(mm.mean()) == 0.0:
+            theta_section_after = float(th)
+            break
     ex, ez = float(eye_ref[0]), float(eye_ref[2])
     plot_section(0.0, l_w, (ex, ez), "before_worst")
-    plot_section(th_w, l_w, (ex, ez), "after_worst")
-    (FIG_DIR / "summary.json").write_text(json.dumps({"series": rows}, ensure_ascii=False, indent=2), encoding="utf-8")
+    plot_section(theta_section_after, l_w, (ex, ez), "after_worst")
+    (FIG_DIR / "summary.json").write_text(
+        json.dumps({"series": rows, "noglare_example": noglare_example}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     print("已写入:", FIG_DIR)
     w = rows[worst_idx]
     print("最坏时刻 t=", w["t_h"], "theta*=", w["theta_star_deg"], "受害比例", w["affected_frac_theta0"], "->", w["affected_frac_opt"])

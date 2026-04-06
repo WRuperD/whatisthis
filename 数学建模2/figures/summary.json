@@ -133,5 +133,11 @@
       "affected_frac_theta0": 0.0,
       "affected_frac_opt": 0.0
     }
-  ]
+  ],
+  "noglare_example": {
+    "t_h": 9.5,
+    "theta_noglare_deg": 1.6500000000000001,
+    "affected_frac_theta0": 0.03125,
+    "affected_frac_theta_noglare": 0.0
+  }
 }
